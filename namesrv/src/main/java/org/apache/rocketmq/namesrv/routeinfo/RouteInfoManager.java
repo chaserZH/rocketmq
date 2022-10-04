@@ -72,10 +72,25 @@ public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    /**
+     * Topic消息队列路由信息，消息发送时根据路由表进行负载均衡
+     */
     private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;
+    /**
+     * Broker基础信息，包含brokerName，所属集群名称、主备Broker地址
+     */
     private final Map<String/* brokerName */, BrokerData> brokerAddrTable;
+    /**
+     * Broker集群信息，存储集群中所有的Broker名称
+     */
     private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    /**
+     * Broker状态信息。NameServer每次收到心跳包时会替换该信息
+     */
     private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+    /**
+     * Broker上的FilterServer列表，用于消息过滤
+     */
     private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
     private final Map<String/* topic */, Map<String/*brokerName*/, TopicQueueMappingInfo>> topicQueueMappingInfoTable;
 
@@ -231,6 +246,7 @@ public class RouteInfoManager {
         final Channel channel) {
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
+            //step1、路由注册需要加写锁，防止并发修改RouteInfoManager中路由表
             this.lock.writeLock().lockInterruptibly();
 
             //init or update the cluster info
@@ -239,12 +255,17 @@ public class RouteInfoManager {
 
             boolean registerFirst = false;
 
+            //step2、维护BrokerData信息，首先从brokerAddrTable根据brokerName尝试获取Broker信息。
             BrokerData brokerData = this.brokerAddrTable.get(brokerName);
             if (null == brokerData) {
                 registerFirst = true;
                 brokerData = new BrokerData(clusterName, brokerName, new HashMap<>());
                 this.brokerAddrTable.put(brokerName, brokerData);
             }
+
+            //step3、如果Broker为Master,并且Broker Topic配置信息发生变化或者初次注册，
+            // 则需要创建或更新Topic路由元数据。
+            //填充topicQueueTable，其实就是为默认主题自动注册路由信息。
 
             boolean isOldVersionBroker = enableActingMaster == null;
             brokerData.setEnableActingMaster(!isOldVersionBroker && enableActingMaster);
@@ -267,6 +288,7 @@ public class RouteInfoManager {
             brokerAddrsMap.entrySet().removeIf(item -> null != brokerAddr && brokerAddr.equals(item.getValue()) && brokerId != item.getKey());
 
             //If Local brokerId stateVersion bigger than the registering one,
+            //step4、更新BrokerLiveInfo
             String oldBrokerAddr = brokerAddrsMap.get(brokerId);
             if (null != oldBrokerAddr && !oldBrokerAddr.equals(brokerAddr)) {
                 BrokerLiveInfo oldBrokerInfo = brokerLiveTable.get(new BrokerAddrInfo(clusterName, oldBrokerAddr));
@@ -344,6 +366,7 @@ public class RouteInfoManager {
                 log.info("new broker registered, {} HAService: {}", brokerAddrInfo, haServerAddr);
             }
 
+            //step5、注册Broker的过滤器Server地址列表，一个Broker上会关联多个FilterServer消息过滤服务器
             if (filterServerList != null) {
                 if (filterServerList.isEmpty()) {
                     this.filterServerTable.remove(brokerAddrInfo);
