@@ -82,6 +82,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * For non-transactional messages, it does not matter as long as it's unique per process. </p>
      *
      * See <a href="http://rocketmq.apache.org/docs/core-concept/">core concepts</a> for more discussion.
+     * 生产者组:从概念上聚合了完全相同角色的所有生产者实例
      */
     private String producerGroup;
 
@@ -92,16 +93,19 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
      * Number of queues to create per default topic.
+     * MessageQueue默认的大小,默认的大小为4
      */
     private volatile int defaultTopicQueueNums = 4;
 
     /**
      * Timeout for sending messages.
+     * 发送消息超时时间,默认时间为3秒
      */
     private int sendMsgTimeout = 3000;
 
     /**
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
+     * 消息压缩的阈值,默认消息超过4k就会被压缩
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
 
@@ -109,6 +113,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     * 消息发送失败的时候重试次数默认是2次
      */
     private int retryTimesWhenSendFailed = 2;
 
@@ -116,16 +121,19 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in asynchronous mode. </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     * 消息异步发送失败的时候重试次数默认是2次
      */
     private int retryTimesWhenSendAsyncFailed = 2;
 
     /**
      * Indicate whether to retry another broker on sending failure internally.
+     * 指示是否在内部发送失败时重试另个broker
      */
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 
     /**
      * Maximum allowed message body size in bytes.
+     * 最大的消息大小，默认是4M
      */
     private int maxMessageSize = 1024 * 1024 * 4; // 4M
 
@@ -218,8 +226,11 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * @param rpcHook RPC hook to execute per each remoting command execution.
      */
     public DefaultMQProducer(final String namespace, final String producerGroup, RPCHook rpcHook) {
+        //命名空间
         this.namespace = namespace;
+        //生产组
         this.producerGroup = producerGroup;
+        //默认的消息发送实现
         defaultMQProducerImpl = new DefaultMQProducerImpl(this, rpcHook);
     }
 
@@ -295,8 +306,17 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      */
     @Override
     public void start() throws MQClientException {
+        //设置producerGroup
         this.setProducerGroup(withNamespace(this.producerGroup));
+        // 启动defaultMqProducerImpl
+        /**
+         * 主要做了3件事
+         * 根据服务状态，创建和启动MQ实例客户端
+         * 发送心跳给Broker
+         * 定时任务扫描过期的请求
+         */
         this.defaultMQProducerImpl.start();
+        //消息轨迹追踪
         if (null != traceDispatcher) {
             try {
                 traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());

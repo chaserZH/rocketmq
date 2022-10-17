@@ -38,9 +38,19 @@ public class ClientConfig {
     public static final String SOCKS_PROXY_CONFIG = "com.rocketmq.socks.proxy.config";
     public static final String DECODE_READ_BODY = "com.rocketmq.read.body";
     public static final String DECODE_DECOMPRESS_BODY = "com.rocketmq.decompress.body";
+    /**
+     * name Server服务器地址，默认从jvm启动参数rocketmq namesrv.addr、系统环境变量NAMESRV ADDR中找
+     */
     private String namesrvAddr = NameServerAddressUtils.getNameServerAddresses();
+    /**
+     * 客户端的IP ,当客户端是生产者,则这个IP就是生产者的IP,当客户端是消费者,则这个IP就是消费者的我IP
+     */
     private String clientIP = RemotingUtil.getLocalAddress();
+    /**
+     * 实例的名字或者说客户端的名字,从启动参数rocketmq .client name查找,如果找不到默认为DEFAULT
+     */
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
+
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     protected String namespace;
     private boolean namespaceInitialized = false;
@@ -48,16 +58,22 @@ public class ClientConfig {
 
     /**
      * Pulling topic information interval from the named server
+     * 从Name Server拉取topic信息的时间间隔,默认是30秒
      */
     private int pollNameServerInterval = 1000 * 30;
     /**
      * Heartbeat interval in microseconds with message broker
+     * 心跳时间间隔,默认是30秒
      */
     private int heartbeatBrokerInterval = 1000 * 30;
     /**
      * Offset persistent interval for consumer
+     * 消费者位移持久化间隔,默认是5秒
      */
     private int persistConsumerOffsetInterval = 1000 * 5;
+    /**
+     * 当发生异常时,延迟拉取消息的时间,默认是1秒
+     */
     private long pullTimeDelayMillsWhenException = 1000;
     private boolean unitMode = false;
     private String unitName;

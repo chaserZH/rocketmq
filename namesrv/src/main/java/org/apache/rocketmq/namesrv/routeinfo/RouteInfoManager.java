@@ -250,7 +250,9 @@ public class RouteInfoManager {
             this.lock.writeLock().lockInterruptibly();
 
             //init or update the cluster info
+            // 首先判断broker所在的集群是否存在，如果不存在则创建集群 new HashSet<String>
             Set<String> brokerNames = ConcurrentHashMapUtils.computeIfAbsent((ConcurrentHashMap<String, Set<String>>) this.clusterAddrTable, clusterName, k -> new HashSet<>());
+            // 将broker名加入集群broker集合
             brokerNames.add(brokerName);
 
             boolean registerFirst = false;
@@ -258,6 +260,7 @@ public class RouteInfoManager {
             //step2、维护BrokerData信息，首先从brokerAddrTable根据brokerName尝试获取Broker信息。
             BrokerData brokerData = this.brokerAddrTable.get(brokerName);
             if (null == brokerData) {
+                // 要注册broker，第一次注册
                 registerFirst = true;
                 brokerData = new BrokerData(clusterName, brokerName, new HashMap<>());
                 this.brokerAddrTable.put(brokerName, brokerData);
@@ -285,6 +288,7 @@ public class RouteInfoManager {
 
             //Switch slave to master: first remove <1, IP:PORT> in namesrv, then add <0, IP:PORT>
             //The same IP:PORT must only have one record in brokerAddrTable
+            // 译：slave切换到master是 先把slave移除，再添加。同一个 IP:PORT 必须只有一个记录
             brokerAddrsMap.entrySet().removeIf(item -> null != brokerAddr && brokerAddr.equals(item.getValue()) && brokerId != item.getKey());
 
             //If Local brokerId stateVersion bigger than the registering one,
@@ -320,12 +324,15 @@ public class RouteInfoManager {
             boolean isPrimeSlave = !isOldVersionBroker && !isMaster
                 && brokerId == Collections.min(brokerAddrsMap.keySet());
 
+            // Topic的配置信息不为空并且Broker是主节点
             if (null != topicConfigWrapper && (isMaster || isPrimeSlave)) {
 
                 ConcurrentMap<String, TopicConfig> tcTable =
                     topicConfigWrapper.getTopicConfigTable();
                 if (tcTable != null) {
                     for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
+                        // 如果broker是主节点并且topic配置信息发生该表(dataVersion不一致)或者是初次注册，需要创建或更新topic路由元数据
+                        // 并填充topicQueueTable，其实就是为默认主题自动注册路由信息，其中包含 MixAll.DEFAULT_TOPIC的路由信息。
                         if (registerFirst || this.isTopicConfigChanged(clusterName, brokerAddr,
                             topicConfigWrapper.getDataVersion(), brokerName,
                             entry.getValue().getTopicName())) {
@@ -334,11 +341,13 @@ public class RouteInfoManager {
                                 // Wipe write perm for prime slave
                                 topicConfig.setPerm(topicConfig.getPerm() & (~PermName.PERM_WRITE));
                             }
+                            // 更新或创建新的 QueueData
                             this.createAndUpdateQueueData(brokerName, topicConfig);
                         }
                     }
                 }
 
+                // 更新BrokerLiveInfo，存储状态正常的Broker信息表，BrokeLiveInfo是执行路由删除操作的重要依据
                 if (this.isBrokerTopicConfigChanged(clusterName, brokerAddr, topicConfigWrapper.getDataVersion()) || registerFirst) {
                     TopicConfigAndMappingSerializeWrapper mappingSerializeWrapper = TopicConfigAndMappingSerializeWrapper.from(topicConfigWrapper);
                     Map<String, TopicQueueMappingInfo> topicQueueMappingInfoMap = mappingSerializeWrapper.getTopicQueueMappingInfoMap();
@@ -375,6 +384,7 @@ public class RouteInfoManager {
                 }
             }
 
+            // 如果是从节点，设置其主节点
             if (MixAll.MASTER_ID != brokerId) {
                 String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                 if (masterAddr != null) {
@@ -807,6 +817,7 @@ public class RouteInfoManager {
         if (brokerAddrInfo != null) {
             try {
                 try {
+                    //获取读锁，如果Channel不为空，就遍历brokerLiveTable尝试获取使用了该Channel的Broker。最后解锁。
                     this.lock.readLock().lockInterruptibly();
                     needUnRegister = setupUnRegisterRequest(unRegisterRequest, brokerAddrInfo);
                 } finally {

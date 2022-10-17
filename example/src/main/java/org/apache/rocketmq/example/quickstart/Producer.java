@@ -56,6 +56,9 @@ public class Producer {
         // Uncomment the following line while debugging, namesrvAddr should be set to your local address
 //        producer.setNamesrvAddr(DEFAULT_NAMESRVADDR);
 
+        //设置 Name Server服务器的地址
+        producer.setNamesrvAddr("name-server1-ip:9876;name-server2-ip:9876");
+
         /*
          * Launch the instance.
          */

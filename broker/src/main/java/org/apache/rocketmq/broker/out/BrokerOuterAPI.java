@@ -467,7 +467,7 @@ public class BrokerOuterAPI {
         final List<RegisterBrokerResult> registerBrokerResultList = new CopyOnWriteArrayList<>();
         List<String> nameServerAddressList = this.remotingClient.getAvailableNameSrvList();
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
-
+            //构造请求头
             final RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
             requestHeader.setBrokerAddr(brokerAddr);
             requestHeader.setBrokerId(brokerId);
@@ -479,20 +479,23 @@ public class BrokerOuterAPI {
             if (heartbeatTimeoutMillis != null) {
                 requestHeader.setHeartbeatTimeoutMillis(heartbeatTimeoutMillis);
             }
-
+            //请求体 ---> TopicConfig
             RegisterBrokerBody requestBody = new RegisterBrokerBody();
             requestBody.setTopicConfigSerializeWrapper(TopicConfigAndMappingSerializeWrapper.from(topicConfigWrapper));
             requestBody.setFilterServerList(filterServerList);
             final byte[] body = requestBody.encode(compressed);
             final int bodyCrc32 = UtilAll.crc32(body);
             requestHeader.setBodyCrc32(bodyCrc32);
+            // CountDownLatch 向每个NameServer的注册都启动一个线程处理
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
             for (final String namesrvAddr : nameServerAddressList) {
                 brokerOuterExecutor.execute(new AbstractBrokerRunnable(brokerIdentity) {
                     @Override
                     public void run2() {
                         try {
+                            // 发起心跳(请求)向NameServer注册
                             RegisterBrokerResult result = registerBroker(namesrvAddr, oneway, timeoutMills, requestHeader, body);
+                            //请求结果
                             if (result != null) {
                                 registerBrokerResultList.add(result);
                             }
@@ -508,13 +511,14 @@ public class BrokerOuterAPI {
             }
 
             try {
+                // 等待向所有的NameServer都注册完
                 if (!countDownLatch.await(timeoutMills, TimeUnit.MILLISECONDS)) {
                     LOGGER.warn("Registration to one or more name servers does NOT complete within deadline. Timeout threshold: {}ms", timeoutMills);
                 }
             } catch (InterruptedException ignore) {
             }
         }
-
+        // 返回注册结果
         return registerBrokerResultList;
     }
 

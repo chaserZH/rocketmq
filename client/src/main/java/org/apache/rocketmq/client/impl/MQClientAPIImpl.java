@@ -277,7 +277,9 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
 
     public String fetchNameServerAddr() {
         try {
+            //通过http获取Name server地址
             String addrs = this.topAddressing.fetchNSAddr();
+            //如果地址不为null，那么更新Name server地址
             if (!UtilAll.isBlank(addrs)) {
                 if (!addrs.equals(this.nameSrvAddr)) {
                     log.info("name server address changed, old=" + this.nameSrvAddr + ", new=" + addrs);
@@ -311,7 +313,14 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
         this.remotingClient.updateNameServerAddressList(list);
     }
 
+    /**
+     * 启动客户端网络连接
+     * start方法只有一行代码，启动客户端网络连接，本质就是启动netty客户端连接
+     */
     public void start() {
+        //初始化netty客户端
+        //定时扫描响应
+        //启动netty事件监听器
         this.remotingClient.start();
     }
 

@@ -379,6 +379,7 @@ public abstract class NettyRemotingAbstract {
      * <p>
      * This method is periodically invoked to scan and expire deprecated request.
      * </p>
+     * 定时扫描响应，利用timer每秒中扫描响应结果，看是否已经过期
      */
     public void scanResponseTable() {
         final List<ResponseFuture> rfList = new LinkedList<>();
@@ -387,6 +388,7 @@ public abstract class NettyRemotingAbstract {
             Entry<Integer, ResponseFuture> next = it.next();
             ResponseFuture rep = next.getValue();
 
+            //删除超时的请求，将过超时的请求保存在list
             if ((rep.getBeginTimestamp() + rep.getTimeoutMillis() + 1000) <= System.currentTimeMillis()) {
                 rep.release();
                 it.remove();
@@ -395,6 +397,7 @@ public abstract class NettyRemotingAbstract {
             }
         }
 
+        //对超时的请求,在线程中执行响应结果回调，对结果进行处理
         for (ResponseFuture rf : rfList) {
             try {
                 executeInvokeCallback(rf);

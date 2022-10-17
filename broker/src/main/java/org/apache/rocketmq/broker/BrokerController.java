@@ -1682,6 +1682,7 @@ public class BrokerController {
             BrokerController.LOG.info("BrokerController#doResterBrokerAll: broker has shutdown, no need to register any more.");
             return;
         }
+        //路由注册
         List<RegisterBrokerResult> registerBrokerResultList = this.brokerOuterAPI.registerBrokerAll(
             this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
@@ -1697,6 +1698,7 @@ public class BrokerController {
             this.brokerConfig.isEnableSlaveActingMaster() ? this.brokerConfig.getBrokerNotActiveTimeoutMillis() : null,
             this.getBrokerIdentity());
 
+        //注册结果
         handleRegisterBrokerResult(registerBrokerResultList, checkOrderConfig);
     }
 

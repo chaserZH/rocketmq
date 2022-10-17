@@ -90,27 +90,36 @@ import static org.apache.rocketmq.common.rpc.ClientMetadata.topicRouteData2Endpo
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
     private final static InternalLogger log = ClientLogger.getLog();
+    // 配置信息
     private final ClientConfig clientConfig;
+    // 客户端id
     private final String clientId;
     private final long bootTimestamp = System.currentTimeMillis();
 
     /**
      * The container of the producer in the current client. The key is the name of producerGroup.
      */
+    // 生产组--》消息生产者，也就是在应用程序一端，每个生产者组在同一台应用服务器只需要初始化一个生产者实例
     private final ConcurrentMap<String, MQProducerInner> producerTable = new ConcurrentHashMap<>();
 
     /**
      * The container of the consumer in the current client. The key is the name of consumerGroup.
      */
+    // 消费组--》消费者，也就是在应用程序一端，每个消费组，在同一台应用服务器只需要初始化一个消费者即可
     private final ConcurrentMap<String, MQConsumerInner> consumerTable = new ConcurrentHashMap<>();
 
     /**
      * The container of the adminExt in the current client. The key is the name of adminExtGroup.
      */
+    // 主要是处理运维命令的
     private final ConcurrentMap<String, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<>();
+    // 网络配置
     private final NettyClientConfig nettyClientConfig;
+    // MQ 客户端实现类
     private final MQClientAPIImpl mQClientAPIImpl;
+    // MQ 管理命令实现类
     private final MQAdminImpl mQAdminImpl;
+    // topic 路由信息
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<>();
     private final ConcurrentMap<String/* Topic */, ConcurrentMap<MessageQueue, String/*brokerName*/>> topicEndPointsTable = new ConcurrentHashMap<>();
     private final Lock lockNamesrv = new ReentrantLock();
@@ -121,15 +130,23 @@ public class MQClientInstance {
      * And the value is the broker instance list that belongs to the broker cluster.
      * For the sub map, the key is the id of single broker instance, and the value is the address.
      */
+    // broker信息，这些信息存在于NameServer，但缓存在本地客户端，供生产者、消费者共同使用
+    // 有可能导致消息丢失
     private final ConcurrentMap<String, HashMap<Long, String>> brokerAddrTable = new ConcurrentHashMap<>();
 
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "MQClientFactoryScheduledThread"));
+    // 消息拉取线程，一个MQClientInstance 只会启动一个消息拉取线程
     private final PullMessageService pullMessageService;
+    // 队列动态负载线程
     private final RebalanceService rebalanceService;
+    // 消息生产者
     private final DefaultMQProducer defaultMQProducer;
+    // 消费端统计
     private final ConsumerStatsManager consumerStatsManager;
+    // 心跳包发送次数
     private final AtomicLong sendHeartbeatTimesTotal = new AtomicLong(0);
+    // 状态
     private ServiceState serviceState = ServiceState.CREATE_JUST;
     private final Random random = new Random();
 
@@ -248,6 +265,15 @@ public class MQClientInstance {
         return mqList;
     }
 
+    /**
+     * 获取Name server地址
+     * 启动客户端网络连接（启动请求-响应连接）
+     * 启动多种定时任务
+     * 启动拉取消息服务
+     * 启动负载均衡服务
+     * 启动发送消息服务
+     * @throws MQClientException
+     */
     public void start() throws MQClientException {
 
         synchronized (this) {
@@ -255,18 +281,24 @@ public class MQClientInstance {
                 case CREATE_JUST:
                     this.serviceState = ServiceState.START_FAILED;
                     // If not specified,looking address from name server
+                    // name server 地址为null，则通过http获取
                     if (null == this.clientConfig.getNamesrvAddr()) {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
                     // Start request-response channel
+                    //启动请求-响应连接
                     this.mQClientAPIImpl.start();
                     // Start various schedule tasks
+                    //启动多种定时任务
                     this.startScheduledTask();
                     // Start pull service
+                    //启动拉取消息服务
                     this.pullMessageService.start();
                     // Start rebalance service
+                    //启动负载均衡服务
                     this.rebalanceService.start();
                     // Start push service
+                    //启动发送消息服务
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
                     log.info("the client factory [{}] start OK", this.clientId);
                     this.serviceState = ServiceState.RUNNING;
@@ -279,7 +311,15 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * · 每2分钟获取Name server 地址
+     * · 每30秒从Name server拉取路由消息并更新
+     * · 每三十秒清理下线的Broker和发送心跳
+     * · 每5秒持久化消费位移
+     * · 每分钟调整线程池
+     */
     private void startScheduledTask() {
+        //每2分钟获取Name server 地址
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(() -> {
                 try {
@@ -290,6 +330,7 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
 
+        //每30秒从Name server拉取路由消息并更新
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 MQClientInstance.this.updateTopicRouteInfoFromNameServer();
@@ -298,6 +339,7 @@ public class MQClientInstance {
             }
         }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
 
+        //每三十秒清理下线的Broker和发送心跳
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 MQClientInstance.this.cleanOfflineBroker();
@@ -307,6 +349,7 @@ public class MQClientInstance {
             }
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
 
+        //每5秒持久化消费位移
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 MQClientInstance.this.persistAllConsumerOffset();
@@ -315,6 +358,7 @@ public class MQClientInstance {
             }
         }, 1000 * 10, this.clientConfig.getPersistConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
 
+        //每分钟调整线程池
         this.scheduledExecutorService.scheduleAtFixedRate(() -> {
             try {
                 MQClientInstance.this.adjustThreadPool();
@@ -333,12 +377,15 @@ public class MQClientInstance {
 
         // Consumer
         {
+            //遍历消费者
             for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
                 MQConsumerInner impl = entry.getValue();
                 if (impl != null) {
+                    //所有订阅数据
                     Set<SubscriptionData> subList = impl.subscriptions();
                     if (subList != null) {
                         for (SubscriptionData subData : subList) {
+                            //所有的topic
                             topicList.add(subData.getTopic());
                         }
                     }
@@ -357,6 +404,7 @@ public class MQClientInstance {
             }
         }
 
+        //更新topic路由信息
         for (String topic : topicList) {
             this.updateTopicRouteInfoFromNameServer(topic);
         }
@@ -591,6 +639,14 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 从Name Server获取topic路由数据
+     * 更新路由相关信息
+     * @param topic
+     * @param isDefault
+     * @param defaultMQProducer
+     * @return
+     */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
         try {
@@ -598,10 +654,12 @@ public class MQClientInstance {
                 try {
                     TopicRouteData topicRouteData;
                     if (isDefault && defaultMQProducer != null) {
+                        //从name server获取路由数据
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
                             clientConfig.getMqClientApiTimeout());
                         if (topicRouteData != null) {
                             for (QueueData data : topicRouteData.getQueueDatas()) {
+                                //设置topic的读写队列数
                                 int queueNums = Math.min(defaultMQProducer.getDefaultTopicQueueNums(), data.getReadQueueNums());
                                 data.setReadQueueNums(queueNums);
                                 data.setWriteQueueNums(queueNums);

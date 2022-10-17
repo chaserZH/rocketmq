@@ -199,8 +199,15 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * this.remotingClient.start()代码主要做了三件事：
+     * · 初始化netty客户端
+     * · 定时扫描响应
+     * · 启动netty事件监听器
+     */
     @Override
     public void start() {
+        //默认的事件线程组
         if (this.defaultEventExecutorGroup == null) {
             this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
                 nettyClientConfig.getClientWorkerThreads(),
@@ -214,10 +221,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     }
                 });
         }
+        //初始化netty客户端启动器
         Bootstrap handler = this.bootstrap.group(this.eventLoopGroupWorker).channel(NioSocketChannel.class)
-            .option(ChannelOption.TCP_NODELAY, true)
-            .option(ChannelOption.SO_KEEPALIVE, false)
-            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, nettyClientConfig.getConnectTimeoutMillis())
+            .option(ChannelOption.TCP_NODELAY, true) //tcp不延迟
+            .option(ChannelOption.SO_KEEPALIVE, false) //保持长连接
+            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, nettyClientConfig.getConnectTimeoutMillis()) //连接超时时间
             .handler(new ChannelInitializer<SocketChannel>() {
                 @Override
                 public void initChannel(SocketChannel ch) throws Exception {
@@ -232,11 +240,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     }
                     ch.pipeline().addLast(
                         nettyClientConfig.isDisableNettyWorkerGroup() ? null : defaultEventExecutorGroup,
-                        new NettyEncoder(),
-                        new NettyDecoder(),
+                        new NettyEncoder(), //编码器
+                        new NettyDecoder(), //解码器
                         new IdleStateHandler(0, 0, nettyClientConfig.getClientChannelMaxIdleTimeSeconds()),
-                        new NettyConnectManageHandler(),
-                        new NettyClientHandler());
+                        new NettyConnectManageHandler(), //netty 连接处理器
+                        new NettyClientHandler()); //消息处理器
                 }
             });
         if (nettyClientConfig.getClientSocketSndBufSize() > 0) {
@@ -257,6 +265,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             handler.option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT);
         }
 
+        //定时扫描响应
         this.timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {

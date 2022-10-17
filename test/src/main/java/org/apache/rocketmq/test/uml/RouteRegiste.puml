@@ -1,0 +1,17 @@
+@startuml
+'https://plantuml.com/sequence-diagram
+
+participant  BrokerStartup as startup
+participant BrokerController as controller
+participant BrokerOuterAPI as outerApi
+participant DefaultRequestProcessor as processor
+participant RouteInfoManager as routeManager
+
+startup -> controller : start()
+controller -> outerApi : registerBrokerAll()
+controller -> outerApi: 30s定时调用registerBrokerAll()
+outerApi -> processor : 最终调用processRequest
+processor -> routeManager : registerBroker()
+
+
+@enduml
