@@ -59,7 +59,14 @@ public class NamesrvStartup {
 
     public static NamesrvController main0(String[] args) {
         try {
+            /*
+             * step 1、解析配置文件，需要填充NameServerConfig、NettyServerConfig属性值
+             */
             parseCommandlineAndConfigFile(args);
+            /*
+             * step2、根据启动属性创建NamesrvController实例、并初始化该实例，
+             * NameServerController实例为NameServer核心控制器
+             */
             NamesrvController controller = createAndStartNamesrvController();
             return controller;
         } catch (Throwable e) {
@@ -143,6 +150,12 @@ public class NamesrvStartup {
 
     }
 
+    /**
+     * 根据启动属性创建NamesrvController实例，并初始化该实例
+     * NameServerController实例为NameServer核心控制器
+     * @return NameServerController
+     * @throws Exception 异常
+     */
     public static NamesrvController createAndStartNamesrvController() throws Exception {
 
         NamesrvController controller = createNamesrvController();
@@ -167,12 +180,21 @@ public class NamesrvStartup {
             throw new IllegalArgumentException("NamesrvController is null");
         }
 
+        /**
+         * 加载KV配置，创建NettyServer网络处理对象，然后开启两个定时任务，
+         * 在RocketMQ中此类定时任务统称为心跳检测。
+         * 定时任务1：NameServer每隔10s扫描一次Broker，移除处于不激活状态的Broker
+         * 定时任务2：nameServer每隔10分钟打印一次KV配置
+         */
         boolean initResult = controller.initialize();
         if (!initResult) {
             controller.shutdown();
             System.exit(-3);
         }
 
+        /**
+         * step3:注册JVM钩子函数并启动服务器，以便监听Broker、消息生产者的网络请求
+         */
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, (Callable<Void>) () -> {
             controller.shutdown();
             return null;

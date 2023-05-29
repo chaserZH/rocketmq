@@ -101,7 +101,9 @@ public class NamesrvController {
     }
 
     public boolean initialize() {
+        //加载KV配置
         loadConfig();
+        //创建NettyServer网络处理对象
         initiateNetworkComponents();
         initiateThreadExecutors();
         registerProcessor();
@@ -115,7 +117,11 @@ public class NamesrvController {
         this.kvConfigManager.load();
     }
 
+    /**
+     * 开启两个定时任务
+     */
     private void startScheduleService() {
+        //扫描Broker，移除处于不激活状态的Broker
         this.scanExecutorService.scheduleAtFixedRate(NamesrvController.this.routeInfoManager::scanNotActiveBroker,
             5, this.namesrvConfig.getScanNotActiveBrokerInterval(), TimeUnit.MILLISECONDS);
 

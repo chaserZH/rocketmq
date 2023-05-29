@@ -794,6 +794,9 @@ public class RouteInfoManager {
         return null;
     }
 
+    /**
+     * 路由删除
+     */
     public void scanNotActiveBroker() {
         try {
             log.info("start scanNotActiveBroker");
@@ -873,6 +876,9 @@ public class RouteInfoManager {
         unRegisterRequest.setClusterName(brokerAddrInfo.getClusterName());
         unRegisterRequest.setBrokerAddr(brokerAddrInfo.getBrokerAddr());
 
+        /**
+         * 维护brokerAddrTable。
+         */
         for (Entry<String, BrokerData> stringBrokerDataEntry : this.brokerAddrTable.entrySet()) {
             BrokerData brokerData = stringBrokerDataEntry.getValue();
             if (!brokerAddrInfo.getClusterName().equals(brokerData.getCluster())) {

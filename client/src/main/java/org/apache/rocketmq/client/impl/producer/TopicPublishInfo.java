@@ -34,10 +34,12 @@ public class TopicPublishInfo {
     private boolean haveTopicRouterInfo = false;
     /**
      * 消息队列
+     * 该主题队列的消息队列
      */
     private List<MessageQueue> messageQueueList = new ArrayList<MessageQueue>();
     /**
      * 消息队列索引
+     * 每选择一次消息队列，该值会自增1，如果为Integer.MAX_VALUE，则重置为0，用于选择消息队列
      */
     private volatile ThreadLocalIndex sendWhichQueue = new ThreadLocalIndex();
     /**
